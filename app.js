@@ -217,15 +217,27 @@ function hubCursorTick() {
   cursorPos.x += (targetX - cursorPos.x) * snap;
   cursorPos.y += (targetY - cursorPos.y) * snap;
 
+  cursor.style.left = `${cursorPos.x}%`;
+  cursor.style.top = `${cursorPos.y}%`;
+
+  // Предпросмотр появляется, когда точка стоит на кресте узла,
+  // независимо от того, где сам курсор.
+  const PREVIEW_DISTANCE = 25;
   let previewNode = null;
-  if (cursorLocked) {
-    const id = hubLayout[cursorTarget.r * 3 + cursorTarget.c];
-    if (id) previewNode = scene.querySelector(`.hub-node[href="#/${id}"]`);
+  const grid = scene.querySelector('.hub-grid');
+  if (grid) {
+    const rect = grid.getBoundingClientRect();
+    const dist = (rect.width / 100) * Math.hypot(
+      targetX - cursorPos.x,
+      targetY - cursorPos.y
+    );
+    if (dist <= PREVIEW_DISTANCE) {
+      const id = hubLayout[cursorTarget.r * 3 + cursorTarget.c];
+      if (id) previewNode = scene.querySelector(`.hub-node[href="#/${id}"]`);
+    }
   }
   hubCursorSetPreview(previewNode);
 
-  cursor.style.left = `${cursorPos.x}%`;
-  cursor.style.top = `${cursorPos.y}%`;
   cursorTick = requestAnimationFrame(hubCursorTick);
 }
 
