@@ -3,9 +3,7 @@
 const scene = document.querySelector('#scene');
 const canvas = document.querySelector('#cross-field');
 const pen = canvas.getContext('2d');
-const motionButton = document.querySelector('#motion');
-const systemMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const sheetCaption = document.querySelector('#sheet-caption');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const svgNS = 'http://www.w3.org/2000/svg';
 const corners = ['tl', 'tr', 'br', 'bl'];
 const anchors = corners.map(corner => `<i class="anchor" data-corner="${corner}" aria-hidden="true"></i>`).join('');
@@ -31,27 +29,10 @@ const figures = {
   overlap: 'M10 43 30 13l44 10-19 30zm3-20 44-10 20 30-45 10zM28 34l14-23 17 23-16 20zm-16 0h65',
 };
 let route;
-let motionOverride;
 let fieldFrame;
 let resizeFrame;
 let transition = 0;
 let sceneAnimations = [];
-
-function motionEnabled() {
-  return motionOverride ?? !systemMotion.matches;
-}
-
-function syncMotion() {
-  const enabled = motionEnabled();
-  document.body.dataset.motion = enabled ? 'on' : 'off';
-  motionButton.setAttribute('aria-pressed', String(enabled));
-  document.querySelector('#motion-state').textContent = enabled ? 'ВКЛ' : 'ВЫКЛ';
-  if (!enabled) {
-    sceneAnimations.forEach(animation => animation.finish());
-    cancelAnimationFrame(fieldFrame);
-    paintCrosses();
-  }
-}
 
 function paintCrosses(origin, progress = 0) {
   if (!pen) return;
@@ -273,7 +254,6 @@ function render(next, animate, focusHeading) {
   const { section, item, level } = next;
   document.body.dataset.level = level;
   scene.innerHTML = level === 1 ? hub() : level === 2 ? category(section) : focus(section, item);
-  sheetCaption.textContent = ['01 — КАРТА ПРОСТРАНСТВА', '02 — ЛИСТ КАТЕГОРИИ', '03 — ФОКУС'][level - 1];
   document.title = level === 1 ? 'АРКА — пространство совместного' : `${item?.title ?? section.title} — АРКА`;
   window.scrollTo(0, 0);
   drawFrame(animate);
@@ -343,7 +323,7 @@ async function navigate(source) {
   scene.querySelector('.hub-source')?.classList.remove('hub-source');
   scene.inert = false;
 
-  if (!motionEnabled()) {
+  if (reducedMotion.matches) {
     render(next, false, true);
     return;
   }
@@ -389,7 +369,7 @@ async function navigate(source) {
     sceneAnimations = [];
   }
   scene.inert = false;
-  const animate = motionEnabled();
+  const animate = !reducedMotion.matches;
   render(next, animate, true);
   if (!animate) {
     expansion?.layer.remove();
@@ -441,11 +421,12 @@ scene.addEventListener('submit', event => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   event.target.querySelector('output').textContent = 'Черновик подготовлен для скачивания.';
 });
-motionButton.addEventListener('click', () => {
-  motionOverride = !motionEnabled();
-  syncMotion();
+reducedMotion.addEventListener('change', ({ matches }) => {
+  if (!matches) return;
+  sceneAnimations.forEach(animation => animation.finish());
+  cancelAnimationFrame(fieldFrame);
+  paintCrosses();
 });
-systemMotion.addEventListener('change', syncMotion);
 window.addEventListener('resize', () => {
   cancelAnimationFrame(resizeFrame);
   resizeFrame = requestAnimationFrame(() => {
@@ -454,6 +435,5 @@ window.addEventListener('resize', () => {
   });
 });
 
-syncMotion();
 resizeField();
 render(readRoute(), false, false);
