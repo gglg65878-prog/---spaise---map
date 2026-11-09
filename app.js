@@ -123,9 +123,136 @@ function hub() {
           </span>
         </a>`;
       }).join('')}
+      <div class="hub-cursor" aria-hidden="true">
+        <i class="hub-cursor-core"></i>
+        <i class="hub-cursor-ring"></i>
+        <i class="hub-cursor-hair"></i>
+      </div>
     </nav>
-    <p class="hub-hint technical"><i class="legend-cross" aria-hidden="true"></i><span class="hint-pointer">Наведите на крест, чтобы увидеть символ раздела</span><span class="hint-touch">Нажмите на крест, чтобы открыть раздел</span></p>
+    <p class="hub-hint technical"><i class="legend-cross" aria-hidden="true"></i><span class="hint-pointer">Наведите на крест, чтобы увидеть символ раздела</span><span class="hint-dot">Точка ходит по осям и магнитится к крестам</span><span class="hint-touch">Нажмите на крест, чтобы открыть раздел</span></p>
   </section>`;
+}
+
+// Плавающая точка главного меню: ходит только вдоль осей и «магнитится»
+// к ближайшему кресту, когда её к нему приближают.
+let cursor;
+let cursorTarget = { c: 1, r: 1 };
+let cursorPos = { x: 50, y: 50 };
+let cursorLocked = false;
+let cursorLastTick = 0;
+let cursorTick = null;
+const CURSOR_MAGNET_R = 56;
+const CURSOR_RELEASE_R = 96;
+
+function nearestAxisIndex(value, axes) {
+  let best = 0;
+  let diff = 1 / 0;
+  axes.forEach((axis, index) => {
+    const d = Math.abs(value - axis);
+    if (d < diff) {
+      diff = d;
+      best = index;
+    }
+  });
+  return best;
+}
+
+function hubCursorInit() {
+  hubCursorStop();
+  cursor = scene.querySelector('.hub-cursor');
+  if (!cursor) return;
+  cursorTarget = { c: 1, r: 1 };
+  cursorPos = { x: 50, y: 50 };
+  cursorLocked = false;
+  cursorLastTick = performance.now();
+  hubCursorTick();
+}
+
+function hubCursorStop() {
+  if (cursorTick) {
+    cancelAnimationFrame(cursorTick);
+    cursorTick = null;
+  }
+}
+
+function hubCursorMove(event) {
+  if (route.level !== 1 || !cursor) return;
+  const grid = scene.querySelector('.hub-grid');
+  const rect = grid.getBoundingClientRect();
+  const px = event.clientX - rect.left;
+  const py = event.clientY - rect.top;
+  if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
+  cursorTarget.c = nearestAxisIndex((px / rect.width) * 100, hubAxes);
+  cursorTarget.r = nearestAxisIndex((py / rect.height) * 100, hubAxes);
+  const cx = (hubAxes[cursorTarget.c] / 100) * rect.width;
+  const cy = (hubAxes[cursorTarget.r] / 100) * rect.height;
+  const d = Math.hypot(px - cx, py - cy);
+  if (!cursorLocked && d < CURSOR_MAGNET_R) {
+    cursorLocked = true;
+    cursor.classList.add('is-lock');
+  } else if (cursorLocked && d > CURSOR_RELEASE_R) {
+    cursorLocked = false;
+    cursor.classList.remove('is-lock');
+  }
+}
+
+function hubCursorTick() {
+  const now = performance.now();
+  const dt = Math.max(0.001, Math.min(0.05, (now - cursorLastTick) / 1000));
+  cursorLastTick = now;
+  if (!cursor) return;
+
+  const targetX = hubAxes[cursorTarget.c];
+  const targetY = hubAxes[cursorTarget.r];
+  const k = reducedMotion.matches ? 1 : 1 - Math.exp(-14 * dt);
+  const snap = cursorLocked ? 1 : k;
+  cursorPos.x += (targetX - cursorPos.x) * snap;
+  cursorPos.y += (targetY - cursorPos.y) * snap;
+
+  cursor.style.left = `${cursorPos.x}%`;
+  cursor.style.top = `${cursorPos.y}%`;
+  cursorTick = requestAnimationFrame(hubCursorTick);
+}
+
+function hubCursorStep(dx, dy) {
+  if (route.level !== 1 || !cursor) return;
+  const c = Math.max(0, Math.min(2, cursorTarget.c + dx));
+  const r = Math.max(0, Math.min(2, cursorTarget.r + dy));
+  if (c === cursorTarget.c && r === cursorTarget.r) return;
+  cursorTarget = { c, r };
+  cursorLocked = false;
+  cursor.classList.remove('is-lock');
+}
+
+function hubCursorOpen() {
+  const section = sections.find(entry => entry.id === hubLayout[cursorTarget.r * 3 + cursorTarget.c]);
+  if (!section) return;
+  const anchor = scene.querySelector(`.hub-node[href="#/${section.id}"]`);
+  history.pushState(null, '', `#${section.id}`);
+  navigate(anchor);
+}
+
+function hubCursorKey(event) {
+  if (route.level !== 1) return;
+  if (event.target && event.target.closest?.('a')) return;
+  let moved = false;
+  if (event.key === 'ArrowUp') {
+    hubCursorStep(0, -1);
+    moved = true;
+  } else if (event.key === 'ArrowDown') {
+    hubCursorStep(0, 1);
+    moved = true;
+  } else if (event.key === 'ArrowLeft') {
+    hubCursorStep(-1, 0);
+    moved = true;
+  } else if (event.key === 'ArrowRight') {
+    hubCursorStep(1, 0);
+    moved = true;
+  } else if (event.key === 'Enter' || event.key === ' ') {
+    hubCursorOpen();
+    return;
+  }
+  if (moved) event.preventDefault();
 }
 
 function crumbs(section, item) {
@@ -257,6 +384,7 @@ function render(next, animate, focusHeading) {
   document.title = level === 1 ? 'АРКА — пространство совместного' : `${item?.title ?? section.title} — АРКА`;
   window.scrollTo(0, 0);
   drawFrame(animate);
+  if (level === 1) hubCursorInit(); else hubCursorStop();
   if (focusHeading) {
     const heading = scene.querySelector('h1');
     heading.tabIndex = -1;
@@ -408,6 +536,8 @@ document.addEventListener('keydown', event => {
   history.pushState(null, '', parent);
   navigate();
 });
+window.addEventListener('pointermove', hubCursorMove);
+document.addEventListener('keydown', hubCursorKey);
 scene.addEventListener('submit', event => {
   if (!event.target.matches('.idea-form')) return;
   event.preventDefault();
