@@ -10,7 +10,19 @@ const svgNS = 'http://www.w3.org/2000/svg';
 const corners = ['tl', 'tr', 'br', 'bl'];
 const anchors = corners.map(corner => `<i class="anchor" data-corner="${corner}" aria-hidden="true"></i>`).join('');
 const frameLayer = '<svg class="frame-layer" aria-hidden="true"></svg>';
-const positions = [[23, 20], [83, 26], [86, 54], [20, 61], [67, 83]];
+const hubAxes = [23, 50, 77];
+const hubLayout = [
+  'projects', null, 'research',
+  null, 'events', null,
+  'about', null, 'idea',
+];
+const hubSymbols = {
+  projects: 'M6 40V9h36v31H32V27a8 8 0 0 0-16 0v13H6Zm0-27h36M11 9v31m26-31v31',
+  research: 'M5 28 23 7l20 11-16 23L5 28Zm8-1 12-14 10 6-10 15-12-7Zm-9 8 17 9m12-5 11-17',
+  events: 'M8 40V11h32v29H8Zm0-21h32M16 7v8m16-8v8M15 25h3m5 0h3m5 0h3m-19 7h3m5 0h3m5 0h3',
+  about: 'M5 9h26v26H5zM17 15h26v26H17zm0 0 14 20m0-20L17 35',
+  idea: 'M24 5v7m15-1-5 5m10 9h-8M9 11l5 5M4 25h8m6 12h12m-10 5h8m-10-5v-3l-4-7a10 10 0 1 1 20 0l-4 7v3',
+};
 const figures = {
   arch: 'M12 53V14h51l14 12v27H60V37a12 12 0 0 0-24 0v16H12zm0-39 14-10h38l13 22M26 4v39m10 10 13-10m11 10 13-10',
   design: 'M18 50 37 11l25 9 13 33H24zm19-39 8 42m17-33L24 53M18 50 62 20l-17 33m-29 3h61M12 11h64',
@@ -104,29 +116,39 @@ function figure(name) {
 }
 
 function hub() {
-  return `<section class="hub">
-    <div class="intro">
-      <p class="eyebrow technical"><b>01</b> КАРТА ПРОСТРАНСТВА</p>
-      <h1>АРК<span>А</span></h1>
-      <h2>Город можно спроектировать заново.</h2>
-      <p class="intro-copy">Сообщество студентов-архитекторов. Изучаем существующую застройку и придумываем, как город может работать лучше.</p>
-      <p class="intro-note technical">ВЫБЕРИТЕ УЗЕЛ НА ЧЕРТЕЖЕ</p>
-    </div>
-    <div class="diagram">
-      <span class="diagram-meta technical" aria-hidden="true">РИС. 01 / АКСОНОМЕТРИЯ</span>
-      <img class="portal" src="assets/portal.svg" alt="" width="620" height="500" fetchpriority="high">
-      <svg class="hub-guides" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
-        <path class="axis" d="M48 500H957M500 88V907"/>
-        <path d="M230 200H345V344h100M830 260H725V357H624M860 540H738V493H686M200 610H305V560H419M670 830H556V705H510"/>
-        <path d="M445 335v18m-9-9h18m170 4v18m-9-9h18m53 127v18m-9-9h18m-276 58v18m-9-9h18m82 136v18m-9-9h18"/>
+  const guides = hubAxes.map(axis => `M${axis} 6V94 M3 ${axis}H97`).join(' ');
+  return `<section class="hub" aria-labelledby="hub-title">
+    <header class="hub-head">
+      <p class="eyebrow technical"><b>01</b> АРКА / ГЛАВНОЕ МЕНЮ</p>
+      <h1 id="hub-title">Карта пространства</h1>
+    </header>
+    <nav class="hub-grid" aria-label="Разделы АРКИ">
+      <svg class="hub-guides" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path d="${guides}"/>
       </svg>
-      <nav class="hub-menu" aria-label="Разделы АРКИ">
-        ${sections.map((section, index) => `<a class="hub-node" href="#/${section.id}" style="--x:${positions[index][0]}%;--y:${positions[index][1]}%">
-          <span class="technical">УЗЕЛ ${section.number}</span><span class="node-title">${section.title}</span><span class="node-arrow" aria-hidden="true">↗</span>
-        </a>`).join('')}
-      </nav>
-      <span class="diagram-scale technical" aria-hidden="true">0&nbsp;&nbsp;&nbsp;&nbsp; 1&nbsp;&nbsp;&nbsp;&nbsp; 2 М</span>
-    </div>
+      ${hubAxes.map((axis, index) => `
+        <span class="axis-label axis-column technical" style="--axis:${axis}%" aria-hidden="true">${'АБВ'[index]}</span>
+        <span class="axis-label axis-row technical" style="--axis:${axis}%" aria-hidden="true">0${index + 1}</span>
+      `).join('')}
+      ${hubLayout.map((id, index) => {
+        const x = hubAxes[index % hubAxes.length];
+        const y = hubAxes[Math.floor(index / hubAxes.length)];
+        const style = `--x:${x}%;--y:${y}%`;
+        if (!id) return `<i class="hub-joint" style="${style}" aria-hidden="true"></i>`;
+        const section = sections.find(entry => entry.id === id);
+        return `<a class="hub-node" href="#/${id}" style="${style}" aria-label="${section.title}">
+          <svg class="hub-mark" viewBox="0 0 40 40" aria-hidden="true">
+            <path d="M17 6h6v11h11v6H23v11h-6V23H6v-6h11z"/>
+            <path d="M27 6h7v7l-2.5-2.5-5 5-2-2 5-5z"/>
+          </svg>
+          <span class="hub-preview" aria-hidden="true">
+            <svg viewBox="0 0 48 48"><path d="${hubSymbols[id]}"/></svg>
+            <span class="technical">${section.title}</span>
+          </span>
+        </a>`;
+      }).join('')}
+    </nav>
+    <p class="hub-hint technical"><i class="legend-cross" aria-hidden="true"></i><span class="hint-pointer">Наведите на крест, чтобы увидеть символ раздела</span><span class="hint-touch">Нажмите на крест, чтобы открыть раздел</span></p>
   </section>`;
 }
 
@@ -254,6 +276,7 @@ function drawFrame(animate = false) {
 function render(next, animate, focusHeading) {
   route = next;
   const { section, item, level } = next;
+  document.body.dataset.level = level;
   scene.innerHTML = level === 1 ? hub() : level === 2 ? category(section) : focus(section, item);
   sheetCaption.textContent = ['01 — КАРТА ПРОСТРАНСТВА', '02 — ЛИСТ КАТЕГОРИИ', '03 — ФОКУС'][level - 1];
   document.title = level === 1 ? 'АРКА — пространство совместного' : `${item?.title ?? section.title} — АРКА`;
