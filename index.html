@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f5ed">
+  <meta name="description" content="АРКА — студенческое сообщество об архитектуре, городе и совместных проектах.">
+  <title>АРКА — пространство совместного</title>
+  <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script src="content.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#scene">К содержанию</a>
+  <canvas id="cross-field" aria-hidden="true"></canvas>
+  <div class="site">
+    <header class="masthead">
+      <a href="#/" class="brand" aria-label="АРКА — на главную">
+        <img src="assets/mark.svg" width="32" height="32" alt="">
+        <span>АРКА<span class="brand-caption">СТУДЕНЧЕСКОЕ<br>СООБЩЕСТВО</span></span>
+      </a>
+      <span class="masthead-center technical">РАБОЧИЕ ЧЕРТЕЖИ <span>/</span> 00</span>
+      <button class="motion technical" id="motion" type="button" aria-pressed="true">
+        <span class="motion-light" aria-hidden="true"></span><span>ДВИЖЕНИЕ</span>
+        <span id="motion-state">ВКЛ</span>
+      </button>
+    </header>
+    <main id="scene" class="scene" tabindex="-1"></main>
+    <footer class="footer technical">
+      <span><i class="legend-cross" aria-hidden="true"></i> АРКА / ПРОСТРАНСТВО СОВМЕСТНОГО</span>
+      <span id="sheet-caption">01 — КАРТА ПРОСТРАНСТВА</span>
+      <span class="footer-edition">РЕД. 01 <b>↗</b></span>
+    </footer>
+  </div>
+</body>
+</html>
