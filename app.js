@@ -288,13 +288,12 @@ function category(section) {
       <div><p class="eyebrow technical"><b>02</b> ЛИСТ ${section.number}</p><h1>${section.title}</h1></div>
       <p class="sheet-summary">${section.description}</p>
     </div>
-    <div class="board" data-frame data-count="${section.items.length}">
-      ${section.items.map((item, index) => `<a class="window" data-window href="#/${section.id}/${item.id}">
+    <div class="board" data-count="${section.items.length}">
+      ${section.items.map((item, index) => `<a class="window" href="#/${section.id}/${item.id}">
         ${anchors}
         <div class="window-top technical"><span>${section.number}.${String(index + 1).padStart(2, '0')}${item.demo ? ' / ПРИМЕР' : ''}</span><b aria-hidden="true">↗</b></div>
         ${figure(item.figure)}<h2>${item.title}</h2><p>${item.description}</p>
       </a>`).join('')}
-      ${frameLayer}
     </div>
     <p class="sheet-note technical">+ ОПОРНЫЙ УЗЕЛ <span aria-hidden="true"> / </span> ВЫБЕРИТЕ ОКНО ДЛЯ ПРИБЛИЖЕНИЯ</p>
   </section>`;
@@ -303,7 +302,7 @@ function category(section) {
 function focus(section, item) {
   return `<section class="focus">
     ${crumbs(section, item)}
-    <article class="focus-panel" data-frame data-window>
+    <article class="focus-panel">
       ${anchors}
       <div class="focus-copy">
         <p class="eyebrow technical"><b>03</b> ${item.demo ? 'ДЕМОНСТРАЦИОННЫЙ ПРИМЕР' : 'ФОКУС'}</p>
@@ -313,7 +312,6 @@ function focus(section, item) {
         ${item.form ? ideaForm() : ''}
       </div>
       <div class="focus-art">${item.figure === 'arch' ? '<img src="assets/portal.svg" alt="" width="620" height="500">' : figure(item.figure)}</div>
-      ${frameLayer}
     </article>
   </section>`;
 }
@@ -338,9 +336,8 @@ function svgPath(className, data) {
 
 function drawFrame(animate = false) {
   const frame = scene.querySelector('[data-frame]');
-  if (!frame) return;
-  const layer = frame.querySelector('.frame-layer');
-  if (layer.classList.contains('erased')) return;
+  const layer = frame ? frame.querySelector('.frame-layer') : null;
+  if (!layer || layer.classList.contains('erased')) return;
 
   // DOM-координаты переводим в систему SVG с поправкой на масштаб сцены.
   const rect = layer.getBoundingClientRect();
