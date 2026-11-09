@@ -125,7 +125,6 @@ function hub() {
       }).join('')}
       <div class="hub-cursor" aria-hidden="true">
         <i class="hub-cursor-core"></i>
-        <i class="hub-cursor-ring"></i>
         <i class="hub-cursor-hair"></i>
       </div>
     </nav>
@@ -143,6 +142,14 @@ let cursorLastTick = 0;
 let cursorTick = null;
 const CURSOR_MAGNET_R = 56;
 const CURSOR_RELEASE_R = 96;
+let cursorPreviewNode = null;
+
+function hubCursorSetPreview(node) {
+  if (node === cursorPreviewNode) return;
+  if (cursorPreviewNode) cursorPreviewNode.classList.remove('is-forced');
+  cursorPreviewNode = node;
+  if (node) node.classList.add('is-forced');
+}
 
 function nearestAxisIndex(value, axes) {
   let best = 0;
@@ -164,6 +171,7 @@ function hubCursorInit() {
   cursorTarget = { c: 1, r: 1 };
   cursorPos = { x: 50, y: 50 };
   cursorLocked = false;
+  cursorPreviewNode = null;
   cursorLastTick = performance.now();
   hubCursorTick();
 }
@@ -208,6 +216,13 @@ function hubCursorTick() {
   const snap = cursorLocked ? 1 : k;
   cursorPos.x += (targetX - cursorPos.x) * snap;
   cursorPos.y += (targetY - cursorPos.y) * snap;
+
+  let previewNode = null;
+  if (cursorLocked) {
+    const id = hubLayout[cursorTarget.r * 3 + cursorTarget.c];
+    if (id) previewNode = scene.querySelector(`.hub-node[href="#/${id}"]`);
+  }
+  hubCursorSetPreview(previewNode);
 
   cursor.style.left = `${cursorPos.x}%`;
   cursor.style.top = `${cursorPos.y}%`;
