@@ -126,10 +126,6 @@ function hub() {
       <svg class="hub-guides" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         <path d="${guides}"/>
       </svg>
-      ${hubAxes.map((axis, index) => `
-        <span class="axis-label axis-column technical" style="--axis:${axis}%" aria-hidden="true">${'АБВ'[index]}</span>
-        <span class="axis-label axis-row technical" style="--axis:${axis}%" aria-hidden="true">0${index + 1}</span>
-      `).join('')}
       ${hubLayout.map((id, index) => {
         const x = hubAxes[index % hubAxes.length];
         const y = hubAxes[Math.floor(index / hubAxes.length)];
@@ -139,7 +135,6 @@ function hub() {
         return `<a class="hub-node" href="#/${id}" style="${style}" aria-label="${section.title}">
           <svg class="hub-mark" viewBox="0 0 40 40" aria-hidden="true">
             <path d="M17 6h6v11h11v6H23v11h-6V23H6v-6h11z"/>
-            <path d="M27 6h7v7l-2.5-2.5-5 5-2-2 5-5z"/>
           </svg>
           <span class="hub-preview" aria-hidden="true">
             <svg viewBox="0 0 48 48"><path d="${hubSymbols[id]}"/></svg>
@@ -289,10 +284,53 @@ function render(next, animate, focusHeading) {
   }
 }
 
-function animateScene(element, keyframes, duration) {
-  const animation = element.animate(keyframes, { duration, easing: 'cubic-bezier(.23,.7,.28,1)', fill: 'both' });
+function animateScene(element, keyframes, duration, easing = 'cubic-bezier(.23,.7,.28,1)') {
+  const animation = element.animate(keyframes, { duration, easing, fill: 'both' });
   sceneAnimations.push(animation);
   return animation;
+}
+
+function expandHubNode({ x, y }, markWidth) {
+  const layer = document.createElement('div');
+  layer.className = 'hub-expansion';
+  layer.setAttribute('aria-hidden', 'true');
+  layer.innerHTML = '<div class="hub-expansion-frame"></div><svg></svg>';
+  document.body.append(layer);
+
+  const arm = markWidth * .275;
+  const split = markWidth * .45;
+  const inset = 8;
+  const duration = 390;
+  const openAt = .33;
+  const stretch = 'cubic-bezier(.28,.04,.2,1)';
+  const shift = (dx, dy) => `translate(${x + dx}px, ${y + dy}px)`;
+  const farEdge = `calc(100% - ${inset}px)`;
+  const drawing = layer.querySelector('svg');
+  for (const side of [-1, 1]) {
+    // В исходном положении два Г-образных штриха складываются в крест.
+    const end = -side * arm;
+    const corner = svgPath('hub-expansion-corner', `M${end} 0H0V${end}`);
+    corner.setAttribute('stroke-width', markWidth * .15);
+    drawing.append(corner);
+    const push = -side * markWidth * .13;
+    const start = `${inset}px`;
+    const edge = side < 0 ? start : farEdge;
+    animateScene(corner, [
+      { transform: shift(0, 0), offset: 0 },
+      { transform: shift(push, push), offset: .15, easing: 'ease-out' },
+      { transform: shift(side * split, side * split), offset: openAt, easing: stretch },
+      { transform: `translate(${edge}, ${edge})`, offset: 1 },
+    ], duration, 'linear');
+  }
+
+  const initialFrame = { left: `${x - split}px`, top: `${y - split}px`, width: `${2 * split}px`, height: `${2 * split}px` };
+  const fullSize = `calc(100% - ${2 * inset}px)`;
+  const frame = animateScene(layer.firstElementChild, [
+    { ...initialFrame, opacity: 0, offset: 0 },
+    { ...initialFrame, opacity: 0, offset: openAt, easing: stretch },
+    { left: `${inset}px`, top: `${inset}px`, width: fullSize, height: fullSize, opacity: 1, offset: 1 },
+  ], duration, 'linear');
+  return { layer, frame };
 }
 
 async function navigate(source) {
@@ -301,6 +339,8 @@ async function navigate(source) {
   const ticket = ++transition;
   sceneAnimations.forEach(animation => animation.cancel());
   sceneAnimations = [];
+  document.querySelector('.hub-expansion')?.remove();
+  scene.querySelector('.hub-source')?.classList.remove('hub-source');
   scene.inert = false;
 
   if (!motionEnabled()) {
@@ -308,27 +348,33 @@ async function navigate(source) {
     return;
   }
 
-  const sourceRect = source?.getBoundingClientRect();
+  const zoomIn = next.level > previous.level;
+  const hubMark = zoomIn ? source?.querySelector('.hub-mark') : null;
+  const sourceRect = (hubMark ?? source)?.getBoundingClientRect();
   const sceneRect = scene.getBoundingClientRect();
   const origin = {
     x: sourceRect ? sourceRect.left + sourceRect.width / 2 : innerWidth / 2,
     y: sourceRect ? sourceRect.top + sourceRect.height / 2 : innerHeight / 2,
   };
-  const zoomIn = next.level > previous.level;
   const transformOrigin = `${origin.x - sceneRect.left}px ${origin.y - sceneRect.top}px`;
   scene.querySelector('.frame-layer')?.classList.add('erased');
   scene.inert = true;
-  burst(origin);
+  const expansion = hubMark ? expandHubNode(origin, sourceRect.width) : null;
+  if (expansion) {
+    source.classList.add('hub-source');
+  } else {
+    burst(origin);
+  }
   if (zoomIn && source?.matches('.window, .hub-node')) {
-    for (const sibling of source.parentElement.querySelectorAll('.window, .hub-node')) {
+    for (const sibling of source.parentElement.querySelectorAll('.window, .hub-node, .hub-joint')) {
       if (sibling === source) continue;
       const rect = sibling.getBoundingClientRect();
       const dx = (rect.left + rect.width / 2 - origin.x) * .33;
       const dy = (rect.top + rect.height / 2 - origin.y) * .33;
-      animateScene(sibling, [{ translate: '0 0', opacity: 1 }, { translate: `${dx}px ${dy}px`, opacity: 0 }], 135);
+      animateScene(sibling, [{ translate: '0 0', opacity: 1 }, { translate: `${dx}px ${dy}px`, opacity: 0 }], expansion ? 245 : 135);
     }
   }
-  const outgoing = animateScene(scene, [
+  const outgoing = expansion?.frame ?? animateScene(scene, [
     { transform: 'scale(1)', opacity: 1, transformOrigin },
     { transform: zoomIn ? 'scale(1.15)' : 'scale(.96)', opacity: 0, transformOrigin },
   ], 135);
@@ -338,19 +384,26 @@ async function navigate(source) {
     return;
   }
   if (ticket !== transition) return;
-  sceneAnimations.forEach(animation => animation.cancel());
-  sceneAnimations = [];
+  if (!expansion) {
+    sceneAnimations.forEach(animation => animation.cancel());
+    sceneAnimations = [];
+  }
   scene.inert = false;
   const animate = motionEnabled();
   render(next, animate, true);
-  if (!animate) return;
-  const incoming = animateScene(scene, [
+  if (!animate) {
+    expansion?.layer.remove();
+    sceneAnimations = [];
+    return;
+  }
+  const incoming = expansion ? animateScene(expansion.layer, [{ opacity: 1 }, { opacity: 0 }], 100) : animateScene(scene, [
     { transform: zoomIn ? 'scale(.968)' : 'scale(1.025)', opacity: .25 },
     { transform: 'scale(1)', opacity: 1 },
   ], 300);
   incoming.finished.then(() => {
     if (ticket !== transition) return;
-    incoming.cancel();
+    expansion?.layer.remove();
+    sceneAnimations.forEach(animation => animation.cancel());
     sceneAnimations = [];
   }, () => {});
 }
