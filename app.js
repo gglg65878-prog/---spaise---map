@@ -220,21 +220,12 @@ function hubCursorTick() {
   cursor.style.left = `${cursorPos.x}%`;
   cursor.style.top = `${cursorPos.y}%`;
 
-  // Предпросмотр появляется, когда точка стоит на кресте узла,
-  // независимо от того, где сам курсор.
-  const PREVIEW_DISTANCE = 25;
+  // Предпросмотр следует за крестом, к которому «магнитится» точка.
+  // Показан всегда (пока точка на кресте), независимо от положения курсора.
   let previewNode = null;
-  const grid = scene.querySelector('.hub-grid');
-  if (grid) {
-    const rect = grid.getBoundingClientRect();
-    const dist = (rect.width / 100) * Math.hypot(
-      targetX - cursorPos.x,
-      targetY - cursorPos.y
-    );
-    if (dist <= PREVIEW_DISTANCE) {
-      const id = hubLayout[cursorTarget.r * 3 + cursorTarget.c];
-      if (id) previewNode = scene.querySelector(`.hub-node[href="#/${id}"]`);
-    }
+  {
+    const id = hubLayout[cursorTarget.r * 3 + cursorTarget.c];
+    if (id) previewNode = scene.querySelector(`.hub-node[href="#/${id}"]`);
   }
   hubCursorSetPreview(previewNode);
 
