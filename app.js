@@ -107,6 +107,7 @@ function hub() {
       <svg class="hub-guides" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         <path d="${guides}"/>
       </svg>
+      <canvas class="hub-trail" aria-hidden="true"></canvas>
       ${hubLayout.map((id, index) => {
         const x = hubAxes[index % hubAxes.length];
         const y = hubAxes[Math.floor(index / hubAxes.length)];
@@ -143,6 +144,17 @@ let cursorTick = null;
 const CURSOR_MAGNET_R = 56;
 const CURSOR_RELEASE_R = 96;
 let cursorPreviewNode = null;
+let trailCanvas = null;
+let trailCtx = null;
+let trailCSS = { w: 0, h: 0 };
+let trail = [];
+const TRAIL_LIFE = 620;
+const TRAIL_FADE = 220;
+let accentGreen = '#0f3d2e';
+{
+  const g = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
+  if (g) accentGreen = g;
+}
 
 function hubCursorSetPreview(node) {
   if (node === cursorPreviewNode) return;
@@ -164,10 +176,62 @@ function nearestAxisIndex(value, axes) {
   return best;
 }
 
+function resizeTrail() {
+  if (!trailCanvas) return;
+  const rect = trailCanvas.getBoundingClientRect();
+  trailCSS = { w: rect.width, h: rect.height };
+  const ratio = Math.min(devicePixelRatio || 1, 2);
+  trailCanvas.width = Math.round(rect.width * ratio);
+  trailCanvas.height = Math.round(rect.height * ratio);
+  trailCtx = trailCanvas.getContext('2d');
+  trailCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  trailCtx.clearRect(0, 0, trailCSS.w, trailCSS.h);
+}
+
+// Шлейф за подвижной точкой: хвост, растворяющийся от прозрачного
+// (хвост) к акцентному зелёному у точки.
+function paintTrail(now) {
+  const ctx = trailCtx;
+  if (!ctx) return;
+  if (trailCSS.w === 0) resizeTrail();
+  ctx.clearRect(0, 0, trailCSS.w, trailCSS.h);
+  if (reducedMotion.matches || trailCSS.w === 0) return;
+  trail.push({ x: cursorPos.x, y: cursorPos.y, t: now });
+  const cutoff = now - TRAIL_LIFE;
+  while (trail.length && trail[0].t < cutoff) trail.shift();
+  const n = trail.length;
+  if (n < 2) return;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = accentGreen;
+  ctx.lineWidth = 2.4;
+  const W = trailCSS.w, H = trailCSS.h;
+  for (let i = 0; i < n - 1; i++) {
+    const a = trail[i], b = trail[i + 1];
+    const age = (now - (a.t + b.t) / 2) / TRAIL_FADE;
+    const alpha = Math.exp(-age);
+    if (alpha <= 0.015) continue;
+    const ax = a.x / 100 * W, ay = a.y / 100 * H;
+    const bx = b.x / 100 * W, by = b.y / 100 * H;
+    if (Math.hypot(bx - ax, by - ay) < 0.4) continue;
+    ctx.globalAlpha = Math.min(0.92, alpha);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
 function hubCursorInit() {
   hubCursorStop();
   cursor = scene.querySelector('.hub-cursor');
   if (!cursor) return;
+  trailCanvas = scene.querySelector('.hub-trail');
+  trailCtx = trailCanvas ? trailCanvas.getContext('2d') : null;
+  trail = [];
+  resizeTrail();
+  requestAnimationFrame(resizeTrail);
   cursorTarget = { c: 1, r: 1 };
   cursorPos = { x: 50, y: 50 };
   cursorLocked = false;
@@ -219,6 +283,8 @@ function hubCursorTick() {
 
   cursor.style.left = `${cursorPos.x}%`;
   cursor.style.top = `${cursorPos.y}%`;
+
+  paintTrail(now);
 
   // Предпросмотр следует за крестом, к которому «магнитится» точка.
   // Показан всегда (пока точка на кресте), независимо от положения курсора.
@@ -577,6 +643,7 @@ window.addEventListener('resize', () => {
   resizeFrame = requestAnimationFrame(() => {
     resizeField();
     drawFrame();
+    resizeTrail();
   });
 });
 
