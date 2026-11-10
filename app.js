@@ -8,11 +8,13 @@ const svgNS = 'http://www.w3.org/2000/svg';
 const corners = ['tl', 'tr', 'br', 'bl'];
 const anchors = corners.map(corner => `<i class="anchor" data-corner="${corner}" aria-hidden="true"></i>`).join('');
 const frameLayer = '<svg class="frame-layer" aria-hidden="true"></svg>';
-const hubAxes = [23, 50, 77];
+const hubAxes = [20, 40, 60, 80];
+const HUB_COLS = hubAxes.length;
 const hubLayout = [
-  'projects', null, 'research',
-  null, 'events', null,
-  'about', null, 'idea',
+  'projects', null, null, 'research',
+  null, 'events', 'archive', null,
+  null, 'journal', null, null,
+  'about', null, null, 'idea',
 ];
 const hubSymbols = {
   projects: 'M6 40V9h36v31H32V27a8 8 0 0 0-16 0v13H6Zm0-27h36M11 9v31m26-31v31',
@@ -20,6 +22,8 @@ const hubSymbols = {
   events: 'M8 40V11h32v29H8Zm0-21h32M16 7v8m16-8v8M15 25h3m5 0h3m5 0h3m-19 7h3m5 0h3m5 0h3',
   about: 'M5 9h26v26H5zM17 15h26v26H17zm0 0 14 20m0-20L17 35',
   idea: 'M24 5v7m15-1-5 5m10 9h-8M9 11l5 5M4 25h8m6 12h12m-10 5h8m-10-5v-3l-4-7a10 10 0 1 1 20 0l-4 7v3',
+  archive: 'M7 9h26v18H7M20 25v9m-4-5 4 5-4 5',
+  journal: 'M12 7h20v30H12m1 0v30M17 15h13M17 20h13M17 25h13M17 30h13',
 };
 const figures = {
   arch: 'M12 53V14h51l14 12v27H60V37a12 12 0 0 0-24 0v16H12zm0-39 14-10h38l13 22M26 4v39m10 10 13-10m11 10 13-10',
@@ -129,21 +133,25 @@ function hub() {
         <i class="hub-cursor-hair"></i>
       </div>
     </nav>
-    <p class="hub-hint technical"><i class="legend-cross" aria-hidden="true"></i><span class="hint-pointer">Наведите на крест, чтобы увидеть символ раздела</span><span class="hint-dot">Точка ходит по осям и магнитится к крестам</span><span class="hint-touch">Нажмите на крест, чтобы открыть раздел</span></p>
+    <p class="hub-hint technical"><i class="legend-cross" aria-hidden="true"></i><span class="hint-pointer">Наведите на крест, чтобы увидеть символ раздела</span><span class="hint-dot">Точка ходит по осям и магнитится к крестам</span><span class="hint-touch">Клик в поле — заходим в раздел, где стоит точка</span></p>
   </section>`;
 }
 
-// Плавающая точка главного меню: ходит только вдоль осей и «магнитится»
-// к ближайшему кресту, когда её к нему приближают.
+// Точка главного меню: плавно скользит вдоль ближайших осей, «магнитится»
+// к крестам. Курсор скрывается внутри карты; за границей — барьер-прорыв.
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 let cursor;
 let cursorTarget = { c: 1, r: 1 };
 let cursorPos = { x: 50, y: 50 };
-let cursorLocked = false;
+let cursorLocked = true;
 let cursorLastTick = 0;
 let cursorTick = null;
 const CURSOR_MAGNET_R = 56;
 const CURSOR_RELEASE_R = 96;
 let cursorPreviewNode = null;
+let pointer = { x: 50, y: 50, inside: true };
+let exitRipple = null;
+let exitRippleId = 0;
 let trailCanvas = null;
 let trailCtx = null;
 let trailCSS = { w: 0, h: 0 };
@@ -233,8 +241,8 @@ function hubCursorInit() {
   resizeTrail();
   requestAnimationFrame(resizeTrail);
   cursorTarget = { c: 1, r: 1 };
-  cursorPos = { x: 50, y: 50 };
-  cursorLocked = false;
+  cursorPos = { x: hubAxes[1], y: hubAxes[1] };
+  cursorLocked = true;
   cursorPreviewNode = null;
   cursorLastTick = performance.now();
   hubCursorTick();
@@ -247,24 +255,74 @@ function hubCursorStop() {
   }
 }
 
+// Ближайший крест по расстоянию в пикселях от позиции указателя.
+function nearestCrossPixels(px, py) {
+  const grid = scene.querySelector('.hub-grid');
+  const W = grid.getBoundingClientRect().width;
+  const H = grid.getBoundingClientRect().height;
+  let best = { r: 0, c: 0, d: 1 / 0 };
+  for (let r = 0; r < HUB_COLS; r++) {
+    for (let c = 0; c < HUB_COLS; c++) {
+      const cx = (hubAxes[c] / 100) * W;
+      const cy = (hubAxes[r] / 100) * H;
+      const d = Math.hypot(px - cx, py - cy);
+      if (d < best.d) best = { r, c, d };
+    }
+  }
+  return best;
+}
+
+// Выход из рабочей области: точка прижимается к краю, запускаем прорыв.
+function triggerExitBreak(px, py, rect) {
+  const exitX = clamp(px, 0, rect.width);
+  const exitY = clamp(py, 0, rect.height);
+  const grid = scene.querySelector('.hub-grid');
+  hubBreakOut(grid, exitX, exitY);
+}
+
+// Анимация «прорыва барьера» при выходе указателя из рабочей области:
+// вспышка рамки-барьера + кольцо на точке выхода.
+function hubBreakOut(grid, px, py) {
+  if (grid.classList.contains('breach') || reducedMotion.matches) return;
+  grid.classList.add('breach');
+  setTimeout(() => grid.classList.remove('breach'), 620);
+  if (reducedMotion.matches) return;
+  const ripple = document.createElement('div');
+  ripple.className = 'hub-exit-ripple ripping';
+  ripple.style.left = px + 'px';
+  ripple.style.top = py + 'px';
+  grid.append(ripple);
+  const id = ++exitRippleId;
+  ripple.addEventListener('animationend', () => {
+    if (id === exitRippleId) ripple.remove();
+  }, { once: true });
+}
+
 function hubCursorMove(event) {
   if (route.level !== 1 || !cursor) return;
   const grid = scene.querySelector('.hub-grid');
   const rect = grid.getBoundingClientRect();
   const px = event.clientX - rect.left;
   const py = event.clientY - rect.top;
-  if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
-  cursorTarget.c = nearestAxisIndex((px / rect.width) * 100, hubAxes);
-  cursorTarget.r = nearestAxisIndex((py / rect.height) * 100, hubAxes);
-  const cx = (hubAxes[cursorTarget.c] / 100) * rect.width;
-  const cy = (hubAxes[cursorTarget.r] / 100) * rect.height;
-  const d = Math.hypot(px - cx, py - cy);
-  if (!cursorLocked && d < CURSOR_MAGNET_R) {
+  const inside = px >= 0 && px <= rect.width && py >= 0 && py <= rect.height;
+  if (!inside) {
+    if (pointer.inside) triggerExitBreak(px, py, rect);
+    pointer.inside = false;
+  }
+  pointer.x = clamp((px / rect.width) * 100, 0, 100);
+  pointer.y = clamp((py / rect.height) * 100, 0, 100);
+  const cross = nearestCrossPixels(px, py);
+  const d = cross.d;
+  if (cursorLocked) {
+    cursorTarget = { c: cross.c, r: cross.r };
+    if (d > CURSOR_RELEASE_R) {
+      cursorLocked = false;
+      cursor.classList.remove('is-lock');
+    }
+  } else if (d < CURSOR_MAGNET_R) {
     cursorLocked = true;
+    cursorTarget = { c: cross.c, r: cross.r };
     cursor.classList.add('is-lock');
-  } else if (cursorLocked && d > CURSOR_RELEASE_R) {
-    cursorLocked = false;
-    cursor.classList.remove('is-lock');
   }
 }
 
@@ -274,8 +332,26 @@ function hubCursorTick() {
   cursorLastTick = now;
   if (!cursor) return;
 
-  const targetX = hubAxes[cursorTarget.c];
-  const targetY = hubAxes[cursorTarget.r];
+  // Зафиксированная точка — точный снап на крест. В остальном — плавное
+  // скольжение вдоль ближайшей оси: точка может быть на оси и там, где
+  // креста нет (сдвинуть её в сторону от пересечения).
+  let targetX, targetY;
+  if (cursorLocked) {
+    targetX = hubAxes[cursorTarget.c];
+    targetY = hubAxes[cursorTarget.r];
+  } else {
+    let bestD = 1 / 0;
+    // Горизонтальная ось: y — фиксировано к ближайшей оси, x свободен.
+    for (const y of hubAxes) {
+      const d = Math.abs(pointer.y - y);
+      if (d < bestD) { bestD = d; targetX = pointer.x; targetY = y; }
+    }
+    // Вертикальная ось: x — фиксировано, y свободен.
+    for (const x of hubAxes) {
+      const d = Math.abs(pointer.x - x);
+      if (d < bestD) { bestD = d; targetX = x; targetY = pointer.y; }
+    }
+  }
   const k = reducedMotion.matches ? 1 : 1 - Math.exp(-14 * dt);
   const snap = cursorLocked ? 1 : k;
   cursorPos.x += (targetX - cursorPos.x) * snap;
@@ -286,11 +362,10 @@ function hubCursorTick() {
 
   paintTrail(now);
 
-  // Предпросмотр следует за крестом, к которому «магнитится» точка.
-  // Показан всегда (пока точка на кресте), независимо от положения курсора.
+  // Предпросмотр — только когда точка стоит на кресте раздела.
   let previewNode = null;
-  {
-    const id = hubLayout[cursorTarget.r * 3 + cursorTarget.c];
+  if (cursorLocked) {
+    const id = hubLayout[cursorTarget.r * HUB_COLS + cursorTarget.c];
     if (id) previewNode = scene.querySelector(`.hub-node[href="#/${id}"]`);
   }
   hubCursorSetPreview(previewNode);
@@ -300,19 +375,23 @@ function hubCursorTick() {
 
 function hubCursorStep(dx, dy) {
   if (route.level !== 1 || !cursor) return;
-  const c = Math.max(0, Math.min(2, cursorTarget.c + dx));
-  const r = Math.max(0, Math.min(2, cursorTarget.r + dy));
+  const c = clamp(cursorTarget.c + dx, 0, HUB_COLS - 1);
+  const r = clamp(cursorTarget.r + dy, 0, HUB_COLS - 1);
   if (c === cursorTarget.c && r === cursorTarget.r) return;
   cursorTarget = { c, r };
-  cursorLocked = false;
-  cursor.classList.remove('is-lock');
+  if (!cursorLocked) cursor.classList.add('is-lock');
+  cursorLocked = true;
 }
 
+// Вход в раздел: только если точка стоит на кресте (зафиксирована магнитом).
+// Позиция клика не важна — заходим туда, где стоит точка.
 function hubCursorOpen() {
-  const section = sections.find(entry => entry.id === hubLayout[cursorTarget.r * 3 + cursorTarget.c]);
+  if (!cursorLocked) return;
+  const id = hubLayout[cursorTarget.r * HUB_COLS + cursorTarget.c];
+  const section = sections.find(entry => entry.id === id);
   if (!section) return;
   const anchor = scene.querySelector(`.hub-node[href="#/${section.id}"]`);
-  history.pushState(null, '', `#${section.id}`);
+  history.pushState(null, '', `#/${section.id}`);
   navigate(anchor);
 }
 
@@ -608,6 +687,15 @@ document.addEventListener('click', event => {
   if (link.hash === location.hash) return;
   history.pushState(null, '', link.hash);
   navigate(link);
+});
+// Клик по полю карты (не по кресту) — заходим в раздел, где стоит точка.
+document.addEventListener('click', event => {
+  if (route.level !== 1 || event.defaultPrevented || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  if (event.target.closest('a[href^="#/"]')) return;
+  if (event.target.closest('.hub-grid')) {
+    event.preventDefault();
+    hubCursorOpen();
+  }
 });
 window.addEventListener('hashchange', () => navigate());
 document.addEventListener('keydown', event => {
