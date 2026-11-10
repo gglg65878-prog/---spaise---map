@@ -109,13 +109,7 @@ function hub() {
     </header>
     <nav class="hub-grid" aria-label="Разделы АРКИ">
       <svg class="hub-guides" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <filter id="hand-rough" x="-10%" y="-10%" width="120%" height="120%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="2" seed="7" result="n"/>
-            <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4"/>
-          </filter>
-        </defs>
-        <path d="${guides}" filter="url(#hand-rough)"/>
+        <path d="${guides}"/>
       </svg>
       <canvas class="hub-trail" aria-hidden="true"></canvas>
       ${hubLayout.map((id, index) => {
@@ -126,12 +120,7 @@ function hub() {
         const section = sections.find(entry => entry.id === id);
         return `<a class="hub-node" href="#/${id}" style="${style}" aria-label="${section.title}">
           <svg class="hub-mark" viewBox="0 0 40 40" aria-hidden="true">
-            <g>
-              <path d="M6 20H34" stroke-width="2.8"/>
-              <path d="M20 6V34" stroke-width="2.8"/>
-              <path d="M7 18.4H33" stroke-width="1.4"/>
-              <path d="M21.6 7V33" stroke-width="1.4"/>
-            </g>
+            <path d="M17 6h6v11h11v6H23v11h-6V23H6v-6h11z"/>
           </svg>
           <span class="hub-preview" aria-hidden="true">
             <svg viewBox="0 0 48 48"><path d="${hubSymbols[id]}"/></svg>
